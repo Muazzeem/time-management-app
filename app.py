@@ -1,3 +1,4 @@
+import os
 import re
 import sqlite3
 from datetime import datetime
@@ -11,6 +12,18 @@ app = Flask(__name__)
 
 DB_PATH = Path(__file__).parent / "time_log.db"
 FONT_DIR = Path(__file__).parent / "fonts"
+
+# Render's local disk is wiped on every restart/redeploy, so SQLite alone
+# doesn't survive there. When TURSO_DATABASE_URL is set (e.g. on Render),
+# every read/write goes straight to a persistent Turso database over HTTP.
+# Without it (local development), we fall back to a plain local SQLite file
+# so `python app.py` keeps working with zero setup.
+TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL")
+TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
+
+if TURSO_DATABASE_URL:
+    import turso_serverless
+
 STATUSES = ["Not Started", "In Progress", "Completed", "Blocked"]
 SORT_COLUMNS = {"date": "date", "task": "task", "hours": "hours", "status": "status"}
 MONTH_KEY_RE = re.compile(r"^\d{4}-\d{2}$")
@@ -44,11 +57,20 @@ SEED_ENTRIES = [
 ]
 
 
+def create_connection():
+    if TURSO_DATABASE_URL:
+        conn = turso_serverless.connect(TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
+        conn.row_factory = turso_serverless.Row
+    else:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
+        g.db = create_connection()
     return g.db
 
 
@@ -60,9 +82,7 @@ def close_db(exception=None):
 
 
 def init_db():
-    db = sqlite3.connect(DB_PATH)
-    db.row_factory = sqlite3.Row
-    db.execute("PRAGMA foreign_keys = ON")
+    db = create_connection()
 
     db.execute(
         """
