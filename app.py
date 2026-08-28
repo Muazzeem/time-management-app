@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, g, redirect, render_template, request, url_for
@@ -74,9 +75,25 @@ def index():
         direction = "asc"
 
     db = get_db()
-    rows = db.execute(
-        f"SELECT * FROM entries ORDER BY {SORT_COLUMNS[sort]} {direction}"
-    ).fetchall()
+    rows = db.execute("SELECT * FROM entries ORDER BY date ASC").fetchall()
+
+    groups = {}
+    for row in rows:
+        month_key = row["date"][:7]  # "YYYY-MM"
+        groups.setdefault(month_key, []).append(row)
+
+    for month_rows in groups.values():
+        month_rows.sort(key=lambda r: r[SORT_COLUMNS[sort]], reverse=(direction == "desc"))
+
+    month_keys = sorted(groups.keys(), reverse=(sort == "date" and direction == "desc"))
+    month_groups = [
+        {
+            "label": datetime.strptime(key, "%Y-%m").strftime("%B %Y"),
+            "rows": groups[key],
+            "total_hours": sum(r["hours"] for r in groups[key]),
+        }
+        for key in month_keys
+    ]
 
     total_hours = sum(r["hours"] for r in rows)
     completed = sum(1 for r in rows if r["status"] == "Completed")
@@ -87,7 +104,7 @@ def index():
 
     return render_template(
         "index.html",
-        rows=rows,
+        month_groups=month_groups,
         statuses=STATUSES,
         sort=sort,
         direction=direction,

@@ -73,6 +73,18 @@
   tbody tr:nth-child(even) { background: var(--row-alt); }
   tbody tr:hover { background: #f0f6f3; }
 
+  tr.month-row td {
+    background: #eaf1ed;
+    color: #2f5645;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    border-top: 1px solid var(--border);
+  }
+  tr.month-row:hover td { background: #eaf1ed; }
+  tr.month-row .month-total { text-align: left; font-weight: 700; }
+
   .row-form { display: contents; }
   input[type="date"], input[type="text"], input[type="number"], select {
     border: 1px solid transparent;
@@ -202,8 +214,13 @@
         <th class="actions-col"></th>
       </tr>
     </thead>
+    {% for group in month_groups %}
     <tbody>
-      {% for row in rows %}
+      <tr class="month-row">
+        <td colspan="4">{{ group.label }}</td>
+        <td class="month-total">{{ group.total_hours }}h</td>
+      </tr>
+      {% for row in group.rows %}
       <tr>
         <form class="row-form" action="{{ url_for('update_entry', entry_id=row['id']) }}" method="post" id="form-{{ row['id'] }}">
         <td><input type="date" name="date" value="{{ row['date'] }}" onchange="this.form.requestSubmit()"></td>
@@ -223,6 +240,7 @@
       </tr>
       {% endfor %}
     </tbody>
+    {% endfor %}
     <tfoot>
       <tr>
         <td colspan="2">Total</td>
