@@ -15,6 +15,7 @@ STATUSES = ["Not Started", "In Progress", "Completed", "Blocked"]
 SORT_COLUMNS = {"date": "date", "task": "task", "hours": "hours", "status": "status"}
 MONTH_KEY_RE = re.compile(r"^\d{4}-\d{2}$")
 DEFAULT_HOURLY_RATE = 300.0
+DEFAULT_PROJECT_NAME = "General"
 CURRENCY_SYMBOL = "৳"
 
 BRAND_RGB = (60, 110, 88)
@@ -47,6 +48,7 @@ def get_db():
     if "db" not in g:
         g.db = sqlite3.connect(DB_PATH)
         g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA foreign_keys = ON")
     return g.db
 
 
@@ -59,6 +61,18 @@ def close_db(exception=None):
 
 def init_db():
     db = sqlite3.connect(DB_PATH)
+    db.row_factory = sqlite3.Row
+    db.execute("PRAGMA foreign_keys = ON")
+
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS entries (
@@ -78,25 +92,59 @@ def init_db():
         )
         """
     )
-    count = db.execute("SELECT COUNT(*) FROM entries").fetchone()[0]
-    if count == 0:
-        db.executemany(
-            "INSERT INTO entries (date, task, hours, status) VALUES (?, ?, ?, ?)",
-            SEED_ENTRIES,
+
+    # Migrate entries tables that predate the project_id column.
+    columns = {row["name"] for row in db.execute("PRAGMA table_info(entries)")}
+    if "project_id" not in columns:
+        db.execute(
+            "ALTER TABLE entries ADD COLUMN project_id "
+            "INTEGER REFERENCES projects(id) ON DELETE CASCADE"
         )
+
+    if db.execute("SELECT COUNT(*) FROM projects").fetchone()[0] == 0:
+        cur = db.execute("INSERT INTO projects (name) VALUES (?)", (DEFAULT_PROJECT_NAME,))
+        default_project_id = cur.lastrowid
+    else:
+        default_project_id = db.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()[0]
+
+    db.execute(
+        "UPDATE entries SET project_id = ? WHERE project_id IS NULL",
+        (default_project_id,),
+    )
+
+    if db.execute("SELECT COUNT(*) FROM entries").fetchone()[0] == 0:
+        db.executemany(
+            "INSERT INTO entries (project_id, date, task, hours, status) VALUES (?, ?, ?, ?, ?)",
+            [(default_project_id, *entry) for entry in SEED_ENTRIES],
+        )
+
     if db.execute("SELECT COUNT(*) FROM settings").fetchone()[0] == 0:
         db.execute(
             "INSERT INTO settings (id, hourly_rate) VALUES (1, ?)",
             (DEFAULT_HOURLY_RATE,),
         )
+
     db.commit()
     db.close()
+
+
+def get_project_or_404(project_id):
+    db = get_db()
+    project = db.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+    if project is None:
+        abort(404)
+    return project
 
 
 def get_hourly_rate():
     db = get_db()
     row = db.execute("SELECT hourly_rate FROM settings WHERE id = 1").fetchone()
     return row["hourly_rate"] if row else DEFAULT_HOURLY_RATE
+
+
+def _slugify(text):
+    slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    return slug or "project"
 
 
 @app.template_filter("currency")
@@ -193,7 +241,59 @@ def build_month_pdf(label, rows, total_hours, total_tasks, completed, in_progres
 @app.route("/")
 def index():
     db = get_db()
-    rows = db.execute("SELECT * FROM entries ORDER BY date ASC").fetchall()
+    projects = db.execute(
+        """
+        SELECT p.id, p.name,
+               COALESCE(SUM(e.hours), 0) AS total_hours,
+               COUNT(e.id) AS total_tasks,
+               SUM(CASE WHEN e.status = 'Completed' THEN 1 ELSE 0 END) AS completed,
+               SUM(CASE WHEN e.status = 'In Progress' THEN 1 ELSE 0 END) AS in_progress
+        FROM projects p
+        LEFT JOIN entries e ON e.project_id = p.id
+        GROUP BY p.id
+        ORDER BY p.id DESC
+        """
+    ).fetchall()
+    return render_template("projects.html", projects=projects)
+
+
+@app.route("/projects/add", methods=["POST"])
+def add_project():
+    name = (request.form.get("name") or "").strip()
+    if name:
+        db = get_db()
+        db.execute("INSERT INTO projects (name) VALUES (?)", (name,))
+        db.commit()
+    return redirect(url_for("index"))
+
+
+@app.route("/projects/<int:project_id>/rename", methods=["POST"])
+def rename_project(project_id):
+    get_project_or_404(project_id)
+    name = (request.form.get("name") or "").strip()
+    if name:
+        db = get_db()
+        db.execute("UPDATE projects SET name = ? WHERE id = ?", (name, project_id))
+        db.commit()
+    return redirect(url_for("index"))
+
+
+@app.route("/projects/<int:project_id>/delete", methods=["POST"])
+def delete_project(project_id):
+    get_project_or_404(project_id)
+    db = get_db()
+    db.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+    db.commit()
+    return redirect(url_for("index"))
+
+
+@app.route("/projects/<int:project_id>")
+def project_dashboard(project_id):
+    project = get_project_or_404(project_id)
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM entries WHERE project_id = ? ORDER BY date ASC", (project_id,)
+    ).fetchall()
     rate = get_hourly_rate()
 
     groups = {}
@@ -216,7 +316,8 @@ def index():
 
     total_hours = sum(r["hours"] for r in rows)
     return render_template(
-        "index.html",
+        "project.html",
+        project=project,
         month_summaries=month_summaries,
         total_hours=total_hours,
         total_amount=total_hours * rate,
@@ -228,8 +329,9 @@ def index():
     )
 
 
-@app.route("/month/<key>")
-def month_detail(key):
+@app.route("/projects/<int:project_id>/month/<key>")
+def month_detail(project_id, key):
+    project = get_project_or_404(project_id)
     if not MONTH_KEY_RE.match(key):
         abort(404)
     try:
@@ -246,8 +348,9 @@ def month_detail(key):
 
     db = get_db()
     rows = db.execute(
-        f"SELECT * FROM entries WHERE date LIKE ? ORDER BY {SORT_COLUMNS[sort]} {direction}",
-        (f"{key}-%",),
+        f"SELECT * FROM entries WHERE project_id = ? AND date LIKE ? "
+        f"ORDER BY {SORT_COLUMNS[sort]} {direction}",
+        (project_id, f"{key}-%"),
     ).fetchall()
 
     def next_dir(col):
@@ -256,6 +359,7 @@ def month_detail(key):
     total_hours = sum(r["hours"] for r in rows)
     return render_template(
         "month.html",
+        project=project,
         month_key=key,
         month_label=label,
         rows=rows,
@@ -272,8 +376,9 @@ def month_detail(key):
     )
 
 
-@app.route("/month/<key>/download")
-def month_download(key):
+@app.route("/projects/<int:project_id>/month/<key>/download")
+def month_download(project_id, key):
+    project = get_project_or_404(project_id)
     if not MONTH_KEY_RE.match(key):
         abort(404)
     try:
@@ -283,12 +388,12 @@ def month_download(key):
 
     db = get_db()
     rows = db.execute(
-        "SELECT * FROM entries WHERE date LIKE ? ORDER BY date ASC",
-        (f"{key}-%",),
+        "SELECT * FROM entries WHERE project_id = ? AND date LIKE ? ORDER BY date ASC",
+        (project_id, f"{key}-%"),
     ).fetchall()
 
     pdf_bytes = build_month_pdf(
-        label,
+        f"{project['name']} - {label}",
         rows,
         total_hours=sum(r["hours"] for r in rows),
         total_tasks=len(rows),
@@ -297,11 +402,12 @@ def month_download(key):
         rate=get_hourly_rate(),
     )
 
+    slug = _slugify(project["name"])
     return send_file(
         BytesIO(pdf_bytes),
         mimetype="application/pdf",
         as_attachment=True,
-        download_name=f"time-report-{key}.pdf",
+        download_name=f"time-report-{slug}-{key}.pdf",
     )
 
 
@@ -319,12 +425,14 @@ def update_rate():
     return _redirect_next()
 
 
-@app.route("/entries/add", methods=["POST"])
-def add_entry():
+@app.route("/projects/<int:project_id>/entries/add", methods=["POST"])
+def add_entry(project_id):
+    get_project_or_404(project_id)
     db = get_db()
     db.execute(
-        "INSERT INTO entries (date, task, hours, status) VALUES (?, ?, ?, ?)",
+        "INSERT INTO entries (project_id, date, task, hours, status) VALUES (?, ?, ?, ?, ?)",
         (
+            project_id,
             request.form["date"],
             request.form["task"],
             float(request.form.get("hours") or 0),
