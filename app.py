@@ -10,10 +10,12 @@ from flask import Flask, abort, g, redirect, render_template, request, send_file
 app = Flask(__name__)
 
 DB_PATH = Path(__file__).parent / "time_log.db"
+FONT_DIR = Path(__file__).parent / "fonts"
 STATUSES = ["Not Started", "In Progress", "Completed", "Blocked"]
 SORT_COLUMNS = {"date": "date", "task": "task", "hours": "hours", "status": "status"}
 MONTH_KEY_RE = re.compile(r"^\d{4}-\d{2}$")
 DEFAULT_HOURLY_RATE = 300.0
+CURRENCY_SYMBOL = "৳"
 
 BRAND_RGB = (60, 110, 88)
 STATUS_RGB = {
@@ -100,7 +102,7 @@ def get_hourly_rate():
 @app.template_filter("currency")
 def currency_filter(value):
     try:
-        return f"${float(value):,.2f}"
+        return f"{CURRENCY_SYMBOL}{float(value):,.2f}"
     except (TypeError, ValueError):
         return value
 
@@ -111,7 +113,7 @@ def inject_hourly_rate():
 
 
 def _fit_text(pdf, text, width, font_size):
-    pdf.set_font("Helvetica", "", font_size)
+    pdf.set_font("NotoBengali", "", font_size)
     if pdf.get_string_width(text) <= width - 2:
         return text
     while text and pdf.get_string_width(text + "...") > width - 2:
@@ -124,42 +126,50 @@ def build_month_pdf(label, rows, total_hours, total_tasks, completed, in_progres
 
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_font("NotoBengali", "", str(FONT_DIR / "NotoSansBengali-Regular.ttf"))
+    pdf.add_font("NotoBengali", "B", str(FONT_DIR / "NotoSansBengali-Bold.ttf"))
     pdf.add_page()
 
-    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_font("NotoBengali", "B", 18)
     pdf.set_text_color(*BRAND_RGB)
-    pdf.cell(0, 10, f"Time Report - {label}", ln=1)
+    pdf.cell(0, 10, f"Time Report - {label}", new_x="LMARGIN", new_y="NEXT")
 
-    pdf.set_font("Helvetica", "", 11)
+    pdf.set_font("NotoBengali", "", 11)
     pdf.set_text_color(90, 90, 90)
     pdf.cell(
         0,
         7,
         f"Total Hours: {total_hours}    Tasks: {total_tasks}    "
         f"Completed: {completed}    In Progress: {in_progress}",
-        ln=1,
+        new_x="LMARGIN",
+        new_y="NEXT",
     )
-    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_font("NotoBengali", "B", 13)
     pdf.set_text_color(*BRAND_RGB)
-    pdf.cell(0, 8, f"Amount Earned (${rate:,.2f}/hr): ${total_amount:,.2f}", ln=1)
+    pdf.cell(
+        0,
+        9,
+        f"Total Amount Earned ({CURRENCY_SYMBOL}{rate:,.2f}/hr): {CURRENCY_SYMBOL}{total_amount:,.2f}",
+        new_x="LMARGIN",
+        new_y="NEXT",
+    )
     pdf.ln(2)
 
-    col_widths = [22, 76, 16, 24, 28]
-    headers = ["Date", "Task", "Hours", "Status", "Amount"]
+    col_widths = [28, 108, 22, 32]
+    headers = ["Date", "Task", "Hours", "Status"]
 
-    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_font("NotoBengali", "B", 10)
     pdf.set_fill_color(*BRAND_RGB)
     pdf.set_text_color(255, 255, 255)
     for width, header in zip(col_widths, headers):
         pdf.cell(width, 9, header, border=1, fill=True, align="L")
     pdf.ln()
 
-    pdf.set_font("Helvetica", "", 10)
+    pdf.set_font("NotoBengali", "", 10)
     for i, row in enumerate(rows):
         pdf.set_fill_color(245, 247, 246) if i % 2 else pdf.set_fill_color(255, 255, 255)
         date_display = datetime.strptime(row["date"], "%Y-%m-%d").strftime("%d/%m/%Y")
         task_display = _fit_text(pdf, row["task"], col_widths[1], 10)
-        amount_display = f"${row['hours'] * rate:,.2f}"
 
         pdf.set_text_color(30, 30, 30)
         pdf.cell(col_widths[0], 8, date_display, border=1, fill=True)
@@ -168,18 +178,14 @@ def build_month_pdf(label, rows, total_hours, total_tasks, completed, in_progres
 
         pdf.set_text_color(*STATUS_RGB.get(row["status"], (30, 30, 30)))
         pdf.cell(col_widths[3], 8, row["status"], border=1, fill=True)
-
-        pdf.set_text_color(30, 30, 30)
-        pdf.cell(col_widths[4], 8, amount_display, border=1, fill=True)
         pdf.ln()
 
-    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_font("NotoBengali", "B", 10)
     pdf.set_text_color(30, 30, 30)
     pdf.set_fill_color(235, 238, 236)
     pdf.cell(col_widths[0] + col_widths[1], 9, "Total", border=1, fill=True)
     pdf.cell(col_widths[2], 9, f"{total_hours:.1f}", border=1, fill=True)
     pdf.cell(col_widths[3], 9, "", border=1, fill=True)
-    pdf.cell(col_widths[4], 9, f"${total_amount:,.2f}", border=1, fill=True)
 
     return bytes(pdf.output())
 
