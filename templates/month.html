@@ -24,8 +24,16 @@
   </div>
 </div>
 
-<div class="row g-3 mb-4">
-  <div class="col-6 col-md-3">
+<div class="row row-cols-2 row-cols-md-5 g-3 mb-4">
+  <div class="col">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body d-flex align-items-center justify-content-between">
+        <div><div class="fs-4 fw-bold text-success">{{ total_amount | currency }}</div><div class="text-muted small">Amount Earned</div></div>
+        <i class="bi bi-cash-stack stat-icon text-success"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col">
     <div class="card border-0 shadow-sm h-100">
       <div class="card-body d-flex align-items-center justify-content-between">
         <div><div class="fs-4 fw-bold">{{ total_hours }}</div><div class="text-muted small">Hours Logged</div></div>
@@ -33,7 +41,7 @@
       </div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col">
     <div class="card border-0 shadow-sm h-100">
       <div class="card-body d-flex align-items-center justify-content-between">
         <div><div class="fs-4 fw-bold">{{ total_tasks }}</div><div class="text-muted small">Total Tasks</div></div>
@@ -41,7 +49,7 @@
       </div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col">
     <div class="card border-0 shadow-sm h-100">
       <div class="card-body d-flex align-items-center justify-content-between">
         <div><div class="fs-4 fw-bold">{{ completed }}</div><div class="text-muted small">Completed</div></div>
@@ -49,7 +57,7 @@
       </div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col">
     <div class="card border-0 shadow-sm h-100">
       <div class="card-body d-flex align-items-center justify-content-between">
         <div><div class="fs-4 fw-bold">{{ in_progress }}</div><div class="text-muted small">In Progress</div></div>
@@ -99,6 +107,7 @@
                 Time/h <i class="bi bi-caret-{{ 'up' if sort == 'hours' and direction == 'asc' else 'down' }}-fill small"></i>
               </a>
             </th>
+            <th style="width:110px">Amount</th>
             <th style="width:160px">
               <a class="text-decoration-none text-body fw-semibold" href="{{ url_for('month_detail', key=month_key, sort='status', dir=next_dir('status')) }}">
                 Status <i class="bi bi-caret-{{ 'up' if sort == 'status' and direction == 'asc' else 'down' }}-fill small"></i>
@@ -115,6 +124,7 @@
             <td><input type="date" name="date" value="{{ row['date'] }}" class="form-control form-control-sm border-0 cell-date" onchange="this.form.requestSubmit()"></td>
             <td><input type="text" name="task" value="{{ row['task'] }}" class="form-control form-control-sm border-0 cell-task" onchange="this.form.requestSubmit(); this.closest('tr').dataset.task = this.value;"></td>
             <td><input type="number" step="0.5" min="0" name="hours" value="{{ row['hours'] }}" class="form-control form-control-sm border-0" style="width:70px" onchange="this.form.requestSubmit()"></td>
+            <td class="text-success fw-semibold">{{ (row['hours'] * hourly_rate) | currency }}</td>
             <td>
               <select name="status" class="form-select form-select-sm status-select status-{{ row['status'] | replace(' ', '-') }}"
                 onchange="this.form.requestSubmit(); this.className = 'form-select form-select-sm status-select status-' + this.value.replace(' ', '-'); this.closest('tr').dataset.status = this.value;">
@@ -136,6 +146,7 @@
           <tr class="table-light fw-bold">
             <td colspan="2">Total</td>
             <td>{{ total_hours }}</td>
+            <td class="text-success">{{ total_amount | currency }}</td>
             <td colspan="2"></td>
           </tr>
         </tfoot>

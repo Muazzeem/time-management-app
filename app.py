@@ -13,6 +13,7 @@ DB_PATH = Path(__file__).parent / "time_log.db"
 STATUSES = ["Not Started", "In Progress", "Completed", "Blocked"]
 SORT_COLUMNS = {"date": "date", "task": "task", "hours": "hours", "status": "status"}
 MONTH_KEY_RE = re.compile(r"^\d{4}-\d{2}$")
+DEFAULT_HOURLY_RATE = 300.0
 
 BRAND_RGB = (60, 110, 88)
 STATUS_RGB = {
@@ -67,14 +68,46 @@ def init_db():
         )
         """
     )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            hourly_rate REAL NOT NULL DEFAULT 300
+        )
+        """
+    )
     count = db.execute("SELECT COUNT(*) FROM entries").fetchone()[0]
     if count == 0:
         db.executemany(
             "INSERT INTO entries (date, task, hours, status) VALUES (?, ?, ?, ?)",
             SEED_ENTRIES,
         )
-        db.commit()
+    if db.execute("SELECT COUNT(*) FROM settings").fetchone()[0] == 0:
+        db.execute(
+            "INSERT INTO settings (id, hourly_rate) VALUES (1, ?)",
+            (DEFAULT_HOURLY_RATE,),
+        )
+    db.commit()
     db.close()
+
+
+def get_hourly_rate():
+    db = get_db()
+    row = db.execute("SELECT hourly_rate FROM settings WHERE id = 1").fetchone()
+    return row["hourly_rate"] if row else DEFAULT_HOURLY_RATE
+
+
+@app.template_filter("currency")
+def currency_filter(value):
+    try:
+        return f"${float(value):,.2f}"
+    except (TypeError, ValueError):
+        return value
+
+
+@app.context_processor
+def inject_hourly_rate():
+    return {"hourly_rate": get_hourly_rate()}
 
 
 def _fit_text(pdf, text, width, font_size):
@@ -86,7 +119,9 @@ def _fit_text(pdf, text, width, font_size):
     return text + "..."
 
 
-def build_month_pdf(label, rows, total_hours, total_tasks, completed, in_progress):
+def build_month_pdf(label, rows, total_hours, total_tasks, completed, in_progress, rate):
+    total_amount = total_hours * rate
+
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
@@ -104,10 +139,13 @@ def build_month_pdf(label, rows, total_hours, total_tasks, completed, in_progres
         f"Completed: {completed}    In Progress: {in_progress}",
         ln=1,
     )
-    pdf.ln(4)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_text_color(*BRAND_RGB)
+    pdf.cell(0, 8, f"Amount Earned (${rate:,.2f}/hr): ${total_amount:,.2f}", ln=1)
+    pdf.ln(2)
 
-    col_widths = [26, 96, 20, 30]
-    headers = ["Date", "Task", "Hours", "Status"]
+    col_widths = [22, 76, 16, 24, 28]
+    headers = ["Date", "Task", "Hours", "Status", "Amount"]
 
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_fill_color(*BRAND_RGB)
@@ -121,6 +159,7 @@ def build_month_pdf(label, rows, total_hours, total_tasks, completed, in_progres
         pdf.set_fill_color(245, 247, 246) if i % 2 else pdf.set_fill_color(255, 255, 255)
         date_display = datetime.strptime(row["date"], "%Y-%m-%d").strftime("%d/%m/%Y")
         task_display = _fit_text(pdf, row["task"], col_widths[1], 10)
+        amount_display = f"${row['hours'] * rate:,.2f}"
 
         pdf.set_text_color(30, 30, 30)
         pdf.cell(col_widths[0], 8, date_display, border=1, fill=True)
@@ -129,6 +168,9 @@ def build_month_pdf(label, rows, total_hours, total_tasks, completed, in_progres
 
         pdf.set_text_color(*STATUS_RGB.get(row["status"], (30, 30, 30)))
         pdf.cell(col_widths[3], 8, row["status"], border=1, fill=True)
+
+        pdf.set_text_color(30, 30, 30)
+        pdf.cell(col_widths[4], 8, amount_display, border=1, fill=True)
         pdf.ln()
 
     pdf.set_font("Helvetica", "B", 10)
@@ -137,6 +179,7 @@ def build_month_pdf(label, rows, total_hours, total_tasks, completed, in_progres
     pdf.cell(col_widths[0] + col_widths[1], 9, "Total", border=1, fill=True)
     pdf.cell(col_widths[2], 9, f"{total_hours:.1f}", border=1, fill=True)
     pdf.cell(col_widths[3], 9, "", border=1, fill=True)
+    pdf.cell(col_widths[4], 9, f"${total_amount:,.2f}", border=1, fill=True)
 
     return bytes(pdf.output())
 
@@ -145,6 +188,7 @@ def build_month_pdf(label, rows, total_hours, total_tasks, completed, in_progres
 def index():
     db = get_db()
     rows = db.execute("SELECT * FROM entries ORDER BY date ASC").fetchall()
+    rate = get_hourly_rate()
 
     groups = {}
     for row in rows:
@@ -156,6 +200,7 @@ def index():
             "key": key,
             "label": datetime.strptime(key, "%Y-%m").strftime("%B %Y"),
             "total_hours": sum(r["hours"] for r in groups[key]),
+            "amount": sum(r["hours"] for r in groups[key]) * rate,
             "total_tasks": len(groups[key]),
             "completed": sum(1 for r in groups[key] if r["status"] == "Completed"),
             "in_progress": sum(1 for r in groups[key] if r["status"] == "In Progress"),
@@ -163,10 +208,12 @@ def index():
         for key in month_keys
     ]
 
+    total_hours = sum(r["hours"] for r in rows)
     return render_template(
         "index.html",
         month_summaries=month_summaries,
-        total_hours=sum(r["hours"] for r in rows),
+        total_hours=total_hours,
+        total_amount=total_hours * rate,
         completed=sum(1 for r in rows if r["status"] == "Completed"),
         in_progress=sum(1 for r in rows if r["status"] == "In Progress"),
         total_tasks=len(rows),
@@ -200,6 +247,7 @@ def month_detail(key):
     def next_dir(col):
         return "desc" if sort == col and direction == "asc" else "asc"
 
+    total_hours = sum(r["hours"] for r in rows)
     return render_template(
         "month.html",
         month_key=key,
@@ -209,7 +257,8 @@ def month_detail(key):
         sort=sort,
         direction=direction,
         next_dir=next_dir,
-        total_hours=sum(r["hours"] for r in rows),
+        total_hours=total_hours,
+        total_amount=total_hours * get_hourly_rate(),
         completed=sum(1 for r in rows if r["status"] == "Completed"),
         in_progress=sum(1 for r in rows if r["status"] == "In Progress"),
         total_tasks=len(rows),
@@ -239,6 +288,7 @@ def month_download(key):
         total_tasks=len(rows),
         completed=sum(1 for r in rows if r["status"] == "Completed"),
         in_progress=sum(1 for r in rows if r["status"] == "In Progress"),
+        rate=get_hourly_rate(),
     )
 
     return send_file(
@@ -252,6 +302,15 @@ def month_download(key):
 def _redirect_next():
     next_url = request.form.get("next")
     return redirect(next_url) if next_url else redirect(url_for("index"))
+
+
+@app.route("/settings/rate", methods=["POST"])
+def update_rate():
+    rate = max(0.0, float(request.form.get("rate") or 0))
+    db = get_db()
+    db.execute("UPDATE settings SET hourly_rate = ? WHERE id = 1", (rate,))
+    db.commit()
+    return _redirect_next()
 
 
 @app.route("/entries/add", methods=["POST"])
