@@ -97,6 +97,7 @@ def index():
         in_progress=sum(1 for r in rows if r["status"] == "In Progress"),
         total_tasks=len(rows),
         statuses=STATUSES,
+        today=datetime.now().strftime("%Y-%m-%d"),
     )
 
 
@@ -138,6 +139,7 @@ def month_detail(key):
         completed=sum(1 for r in rows if r["status"] == "Completed"),
         in_progress=sum(1 for r in rows if r["status"] == "In Progress"),
         total_tasks=len(rows),
+        today=datetime.now().strftime("%Y-%m-%d"),
     )
 
 
