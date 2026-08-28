@@ -14,9 +14,14 @@
     <h4 class="mb-1">{{ month_label }}</h4>
     <div class="text-muted small">Click a column header to sort. Edit any cell inline — it saves automatically.</div>
   </div>
-  <button class="btn btn-brand" data-bs-toggle="modal" data-bs-target="#addModal">
-    <i class="bi bi-plus-lg me-1"></i>Add entry
-  </button>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-success" href="{{ url_for('month_download', key=month_key) }}">
+      <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
+    </a>
+    <button class="btn btn-brand" data-bs-toggle="modal" data-bs-target="#addModal">
+      <i class="bi bi-plus-lg me-1"></i>Add entry
+    </button>
+  </div>
 </div>
 
 <div class="row g-3 mb-4">

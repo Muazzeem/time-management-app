@@ -1,9 +1,11 @@
 import re
 import sqlite3
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 
-from flask import Flask, abort, g, redirect, render_template, request, url_for
+from fpdf import FPDF
+from flask import Flask, abort, g, redirect, render_template, request, send_file, url_for
 
 app = Flask(__name__)
 
@@ -11,6 +13,14 @@ DB_PATH = Path(__file__).parent / "time_log.db"
 STATUSES = ["Not Started", "In Progress", "Completed", "Blocked"]
 SORT_COLUMNS = {"date": "date", "task": "task", "hours": "hours", "status": "status"}
 MONTH_KEY_RE = re.compile(r"^\d{4}-\d{2}$")
+
+BRAND_RGB = (60, 110, 88)
+STATUS_RGB = {
+    "Not Started": (71, 85, 105),
+    "In Progress": (146, 64, 14),
+    "Completed": (22, 108, 67),
+    "Blocked": (176, 42, 55),
+}
 
 SEED_ENTRIES = [
     ("2026-06-01", "work on the program API, Save program history", 3, "Completed"),
@@ -65,6 +75,70 @@ def init_db():
         )
         db.commit()
     db.close()
+
+
+def _fit_text(pdf, text, width, font_size):
+    pdf.set_font("Helvetica", "", font_size)
+    if pdf.get_string_width(text) <= width - 2:
+        return text
+    while text and pdf.get_string_width(text + "...") > width - 2:
+        text = text[:-1]
+    return text + "..."
+
+
+def build_month_pdf(label, rows, total_hours, total_tasks, completed, in_progress):
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_text_color(*BRAND_RGB)
+    pdf.cell(0, 10, f"Time Report - {label}", ln=1)
+
+    pdf.set_font("Helvetica", "", 11)
+    pdf.set_text_color(90, 90, 90)
+    pdf.cell(
+        0,
+        7,
+        f"Total Hours: {total_hours}    Tasks: {total_tasks}    "
+        f"Completed: {completed}    In Progress: {in_progress}",
+        ln=1,
+    )
+    pdf.ln(4)
+
+    col_widths = [26, 96, 20, 30]
+    headers = ["Date", "Task", "Hours", "Status"]
+
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_fill_color(*BRAND_RGB)
+    pdf.set_text_color(255, 255, 255)
+    for width, header in zip(col_widths, headers):
+        pdf.cell(width, 9, header, border=1, fill=True, align="L")
+    pdf.ln()
+
+    pdf.set_font("Helvetica", "", 10)
+    for i, row in enumerate(rows):
+        pdf.set_fill_color(245, 247, 246) if i % 2 else pdf.set_fill_color(255, 255, 255)
+        date_display = datetime.strptime(row["date"], "%Y-%m-%d").strftime("%d/%m/%Y")
+        task_display = _fit_text(pdf, row["task"], col_widths[1], 10)
+
+        pdf.set_text_color(30, 30, 30)
+        pdf.cell(col_widths[0], 8, date_display, border=1, fill=True)
+        pdf.cell(col_widths[1], 8, task_display, border=1, fill=True)
+        pdf.cell(col_widths[2], 8, f"{row['hours']:.1f}", border=1, fill=True)
+
+        pdf.set_text_color(*STATUS_RGB.get(row["status"], (30, 30, 30)))
+        pdf.cell(col_widths[3], 8, row["status"], border=1, fill=True)
+        pdf.ln()
+
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(30, 30, 30)
+    pdf.set_fill_color(235, 238, 236)
+    pdf.cell(col_widths[0] + col_widths[1], 9, "Total", border=1, fill=True)
+    pdf.cell(col_widths[2], 9, f"{total_hours:.1f}", border=1, fill=True)
+    pdf.cell(col_widths[3], 9, "", border=1, fill=True)
+
+    return bytes(pdf.output())
 
 
 @app.route("/")
@@ -140,6 +214,38 @@ def month_detail(key):
         in_progress=sum(1 for r in rows if r["status"] == "In Progress"),
         total_tasks=len(rows),
         today=datetime.now().strftime("%Y-%m-%d"),
+    )
+
+
+@app.route("/month/<key>/download")
+def month_download(key):
+    if not MONTH_KEY_RE.match(key):
+        abort(404)
+    try:
+        label = datetime.strptime(key, "%Y-%m").strftime("%B %Y")
+    except ValueError:
+        abort(404)
+
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM entries WHERE date LIKE ? ORDER BY date ASC",
+        (f"{key}-%",),
+    ).fetchall()
+
+    pdf_bytes = build_month_pdf(
+        label,
+        rows,
+        total_hours=sum(r["hours"] for r in rows),
+        total_tasks=len(rows),
+        completed=sum(1 for r in rows if r["status"] == "Completed"),
+        in_progress=sum(1 for r in rows if r["status"] == "In Progress"),
+    )
+
+    return send_file(
+        BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"time-report-{key}.pdf",
     )
 
 
