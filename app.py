@@ -1,14 +1,16 @@
+import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, g, redirect, render_template, request, url_for
+from flask import Flask, abort, g, redirect, render_template, request, url_for
 
 app = Flask(__name__)
 
 DB_PATH = Path(__file__).parent / "time_log.db"
 STATUSES = ["Not Started", "In Progress", "Completed", "Blocked"]
 SORT_COLUMNS = {"date": "date", "task": "task", "hours": "hours", "status": "status"}
+MONTH_KEY_RE = re.compile(r"^\d{4}-\d{2}$")
 
 SEED_ENTRIES = [
     ("2026-06-01", "work on the program API, Save program history", 3, "Completed"),
@@ -67,6 +69,46 @@ def init_db():
 
 @app.route("/")
 def index():
+    db = get_db()
+    rows = db.execute("SELECT * FROM entries ORDER BY date ASC").fetchall()
+
+    groups = {}
+    for row in rows:
+        groups.setdefault(row["date"][:7], []).append(row)
+
+    month_keys = sorted(groups.keys(), reverse=True)
+    month_summaries = [
+        {
+            "key": key,
+            "label": datetime.strptime(key, "%Y-%m").strftime("%B %Y"),
+            "total_hours": sum(r["hours"] for r in groups[key]),
+            "total_tasks": len(groups[key]),
+            "completed": sum(1 for r in groups[key] if r["status"] == "Completed"),
+            "in_progress": sum(1 for r in groups[key] if r["status"] == "In Progress"),
+        }
+        for key in month_keys
+    ]
+
+    return render_template(
+        "index.html",
+        month_summaries=month_summaries,
+        total_hours=sum(r["hours"] for r in rows),
+        completed=sum(1 for r in rows if r["status"] == "Completed"),
+        in_progress=sum(1 for r in rows if r["status"] == "In Progress"),
+        total_tasks=len(rows),
+        statuses=STATUSES,
+    )
+
+
+@app.route("/month/<key>")
+def month_detail(key):
+    if not MONTH_KEY_RE.match(key):
+        abort(404)
+    try:
+        label = datetime.strptime(key, "%Y-%m").strftime("%B %Y")
+    except ValueError:
+        abort(404)
+
     sort = request.args.get("sort", "date")
     direction = request.args.get("dir", "asc")
     if sort not in SORT_COLUMNS:
@@ -75,45 +117,33 @@ def index():
         direction = "asc"
 
     db = get_db()
-    rows = db.execute("SELECT * FROM entries ORDER BY date ASC").fetchall()
-
-    groups = {}
-    for row in rows:
-        month_key = row["date"][:7]  # "YYYY-MM"
-        groups.setdefault(month_key, []).append(row)
-
-    for month_rows in groups.values():
-        month_rows.sort(key=lambda r: r[SORT_COLUMNS[sort]], reverse=(direction == "desc"))
-
-    month_keys = sorted(groups.keys(), reverse=(sort == "date" and direction == "desc"))
-    month_groups = [
-        {
-            "label": datetime.strptime(key, "%Y-%m").strftime("%B %Y"),
-            "rows": groups[key],
-            "total_hours": sum(r["hours"] for r in groups[key]),
-        }
-        for key in month_keys
-    ]
-
-    total_hours = sum(r["hours"] for r in rows)
-    completed = sum(1 for r in rows if r["status"] == "Completed")
-    in_progress = sum(1 for r in rows if r["status"] == "In Progress")
+    rows = db.execute(
+        f"SELECT * FROM entries WHERE date LIKE ? ORDER BY {SORT_COLUMNS[sort]} {direction}",
+        (f"{key}-%",),
+    ).fetchall()
 
     def next_dir(col):
         return "desc" if sort == col and direction == "asc" else "asc"
 
     return render_template(
-        "index.html",
-        month_groups=month_groups,
+        "month.html",
+        month_key=key,
+        month_label=label,
+        rows=rows,
         statuses=STATUSES,
         sort=sort,
         direction=direction,
         next_dir=next_dir,
-        total_hours=total_hours,
-        completed=completed,
-        in_progress=in_progress,
+        total_hours=sum(r["hours"] for r in rows),
+        completed=sum(1 for r in rows if r["status"] == "Completed"),
+        in_progress=sum(1 for r in rows if r["status"] == "In Progress"),
         total_tasks=len(rows),
     )
+
+
+def _redirect_next():
+    next_url = request.form.get("next")
+    return redirect(next_url) if next_url else redirect(url_for("index"))
 
 
 @app.route("/entries/add", methods=["POST"])
@@ -129,7 +159,7 @@ def add_entry():
         ),
     )
     db.commit()
-    return redirect(url_for("index"))
+    return _redirect_next()
 
 
 @app.route("/entries/<int:entry_id>/update", methods=["POST"])
@@ -146,7 +176,7 @@ def update_entry(entry_id):
         ),
     )
     db.commit()
-    return redirect(url_for("index"))
+    return _redirect_next()
 
 
 @app.route("/entries/<int:entry_id>/delete", methods=["POST"])
@@ -154,7 +184,7 @@ def delete_entry(entry_id):
     db = get_db()
     db.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
     db.commit()
-    return redirect(url_for("index"))
+    return _redirect_next()
 
 
 init_db()

@@ -8,9 +8,7 @@
   :root {
     --header-bg: #3c6e58;
     --header-fg: #ffffff;
-    --link-blue: #1d4ed8;
     --border: #e2e5e9;
-    --row-alt: #fafafa;
   }
   * { box-sizing: border-box; }
   body {
@@ -27,7 +25,7 @@
   .summary {
     display: flex;
     gap: 12px;
-    margin-bottom: 20px;
+    margin-bottom: 28px;
     flex-wrap: wrap;
   }
   .card {
@@ -40,107 +38,73 @@
   .card .value { font-size: 22px; font-weight: 700; }
   .card .label { font-size: 12px; color: #6b7280; margin-top: 2px; }
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
+  h2.section-title { font-size: 14px; color: #374151; margin: 0 0 12px; }
+
+  .month-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .month-card {
+    display: block;
     background: #fff;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  }
-  thead th {
-    background: var(--header-bg);
-    color: var(--header-fg);
-    text-align: left;
-    padding: 12px 14px;
-    font-size: 14px;
-    font-weight: 600;
-  }
-  thead th a {
-    color: inherit;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
     text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    color: inherit;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    transition: transform 0.08s ease, box-shadow 0.08s ease, border-color 0.08s ease;
   }
-  thead th .caret { font-size: 10px; opacity: 0.85; }
-  tbody td {
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--border);
-    font-size: 14px;
-    vertical-align: middle;
+  .month-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+    border-color: var(--header-bg);
   }
-  tbody tr:nth-child(even) { background: var(--row-alt); }
-  tbody tr:hover { background: #f0f6f3; }
-
-  tr.month-row td {
-    background: #eaf1ed;
-    color: #2f5645;
+  .month-card .month-name {
+    font-size: 15px;
     font-weight: 700;
-    font-size: 13px;
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--border);
-    border-top: 1px solid var(--border);
+    color: var(--header-bg);
+    margin-bottom: 10px;
   }
-  tr.month-row:hover td { background: #eaf1ed; }
-  tr.month-row .month-total { text-align: left; font-weight: 700; }
-
-  .row-form { display: contents; }
-  input[type="date"], input[type="text"], input[type="number"], select {
-    border: 1px solid transparent;
-    background: transparent;
-    font-size: 14px;
-    font-family: inherit;
-    padding: 4px 6px;
-    border-radius: 5px;
-    width: 100%;
+  .month-card .month-hours {
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 2px;
   }
-  input[type="date"], td:nth-child(2) input[type="text"] {
-    color: var(--link-blue);
+  .month-card .month-hours-label {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 12px;
   }
-  input[type="number"] { width: 64px; }
-  input:hover, select:hover,
-  input:focus, select:focus {
-    border-color: var(--border);
-    background: #f9fafb;
-    outline: none;
+  .month-card .month-stats {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
   }
-
-  .status-select {
+  .badge {
+    font-size: 11px;
     font-weight: 600;
     border-radius: 999px;
-    padding: 4px 10px;
-    cursor: pointer;
-    border: none;
-    appearance: none;
-    -webkit-appearance: none;
+    padding: 3px 9px;
   }
-  .status-Not-Started { background: #f1f5f9; color: #475569; }
-  .status-In-Progress { background: #fef3c7; color: #92400e; }
-  .status-Completed { background: #dcfce7; color: #166534; }
-  .status-Blocked { background: #fee2e2; color: #991b1b; }
+  .badge-tasks { background: #eef2ff; color: #3730a3; }
+  .badge-completed { background: #dcfce7; color: #166534; }
+  .badge-progress { background: #fef3c7; color: #92400e; }
 
-  .actions-col { width: 40px; text-align: center; }
-  .delete-btn {
-    background: none;
-    border: none;
-    color: #9ca3af;
-    cursor: pointer;
-    font-size: 15px;
-    padding: 4px;
-    border-radius: 5px;
-  }
-  .delete-btn:hover { background: #fee2e2; color: #b91c1c; }
-
-  tfoot td {
-    padding: 10px 14px;
-    font-weight: 700;
+  .empty-state {
+    background: #fff;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    text-align: center;
+    color: #6b7280;
     font-size: 14px;
-    border-top: 2px solid var(--border);
+    margin-bottom: 28px;
   }
 
   .add-row {
-    margin-top: 18px;
     background: #fff;
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -179,7 +143,7 @@
 <body>
 <div class="wrap">
   <h1>Time Management — Project Tracker</h1>
-  <div class="subtitle">Click a column header to sort. Edit any cell inline — it saves automatically.</div>
+  <div class="subtitle">Click a month to see its task details.</div>
 
   <div class="summary">
     <div class="card"><div class="value">{{ total_hours }}</div><div class="label">Total Hours Logged</div></div>
@@ -188,71 +152,30 @@
     <div class="card"><div class="value">{{ in_progress }}</div><div class="label">In Progress</div></div>
   </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th style="width:130px">
-          <a href="{{ url_for('index', sort='date', dir=next_dir('date')) }}">
-            Date <span class="caret">{{ '▲' if sort == 'date' and direction == 'asc' else '▼' if sort == 'date' else '▾' }}</span>
-          </a>
-        </th>
-        <th>
-          <a href="{{ url_for('index', sort='task', dir=next_dir('task')) }}">
-            Task <span class="caret">{{ '▲' if sort == 'task' and direction == 'asc' else '▼' if sort == 'task' else '▾' }}</span>
-          </a>
-        </th>
-        <th style="width:90px">
-          <a href="{{ url_for('index', sort='hours', dir=next_dir('hours')) }}">
-            Time/h <span class="caret">{{ '▲' if sort == 'hours' and direction == 'asc' else '▼' if sort == 'hours' else '▾' }}</span>
-          </a>
-        </th>
-        <th style="width:150px">
-          <a href="{{ url_for('index', sort='status', dir=next_dir('status')) }}">
-            Status <span class="caret">{{ '▲' if sort == 'status' and direction == 'asc' else '▼' if sort == 'status' else '▾' }}</span>
-          </a>
-        </th>
-        <th class="actions-col"></th>
-      </tr>
-    </thead>
-    {% for group in month_groups %}
-    <tbody>
-      <tr class="month-row">
-        <td colspan="4">{{ group.label }}</td>
-        <td class="month-total">{{ group.total_hours }}h</td>
-      </tr>
-      {% for row in group.rows %}
-      <tr>
-        <form class="row-form" action="{{ url_for('update_entry', entry_id=row['id']) }}" method="post" id="form-{{ row['id'] }}">
-        <td><input type="date" name="date" value="{{ row['date'] }}" onchange="this.form.requestSubmit()"></td>
-        <td><input type="text" name="task" value="{{ row['task'] }}" onchange="this.form.requestSubmit()"></td>
-        <td><input type="number" step="0.5" min="0" name="hours" value="{{ row['hours'] }}" onchange="this.form.requestSubmit()"></td>
-        <td>
-          <select name="status" class="status-select status-{{ row['status'] | replace(' ', '-') }}" onchange="this.form.requestSubmit(); this.className = 'status-select status-' + this.value.replace(' ', '-');">
-            {% for s in statuses %}
-            <option value="{{ s }}" {% if s == row['status'] %}selected{% endif %}>{{ s }}</option>
-            {% endfor %}
-          </select>
-        </td>
-        <td class="actions-col">
-          <button type="submit" class="delete-btn" formaction="{{ url_for('delete_entry', entry_id=row['id']) }}" title="Delete row" onclick="return confirm('Delete this entry?')">✕</button>
-        </td>
-        </form>
-      </tr>
-      {% endfor %}
-    </tbody>
+  <h2 class="section-title">Months</h2>
+  {% if month_summaries %}
+  <div class="month-grid">
+    {% for m in month_summaries %}
+    <a class="month-card" href="{{ url_for('month_detail', key=m.key) }}">
+      <div class="month-name">{{ m.label }}</div>
+      <div class="month-hours">{{ m.total_hours }}h</div>
+      <div class="month-hours-label">total logged</div>
+      <div class="month-stats">
+        <span class="badge badge-tasks">{{ m.total_tasks }} tasks</span>
+        <span class="badge badge-completed">{{ m.completed }} done</span>
+        {% if m.in_progress %}<span class="badge badge-progress">{{ m.in_progress }} active</span>{% endif %}
+      </div>
+    </a>
     {% endfor %}
-    <tfoot>
-      <tr>
-        <td colspan="2">Total</td>
-        <td>{{ total_hours }}</td>
-        <td colspan="2"></td>
-      </tr>
-    </tfoot>
-  </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No entries yet — add one below to get started.</div>
+  {% endif %}
 
   <div class="add-row">
     <h2>Add entry</h2>
     <form class="add-form" action="{{ url_for('add_entry') }}" method="post">
+      <input type="hidden" name="next" value="{{ url_for('index') }}">
       <input type="date" name="date" required>
       <input type="text" name="task" placeholder="Task description" required>
       <input type="number" step="0.5" min="0" name="hours" placeholder="Hours" required>
