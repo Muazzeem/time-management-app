@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 server.log
 time_log.db
+.env

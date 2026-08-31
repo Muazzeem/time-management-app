@@ -68,6 +68,17 @@
   </div>
 </div>
 
+{% if rows %}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <h6 class="text-uppercase text-muted small fw-bold mb-3">Work History</h6>
+    <div style="height: 260px;">
+      <canvas id="workHistoryChart"></canvas>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div class="card border-0 shadow-sm mb-4">
   <div class="card-body">
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
@@ -220,6 +231,60 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{% if rows %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  (function () {
+    const ctx = document.getElementById('workHistoryChart');
+    if (!ctx) return;
+
+    const labels = {{ chart_labels | tojson }};
+    const datasets = {{ chart_datasets | tojson }};
+    const colors = {
+      'Not Started': '#94a3b8',
+      'In Progress': '#f59e0b',
+      'Completed': '#198754',
+      'Blocked': '#dc3545'
+    };
+
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: Object.keys(datasets)
+          .filter(function (status) { return datasets[status].some(function (v) { return v > 0; }); })
+          .map(function (status) {
+            return {
+              label: status,
+              data: datasets[status],
+              backgroundColor: colors[status],
+              borderRadius: 4,
+              maxBarThickness: 28
+            };
+          })
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true, grid: { display: false } },
+          y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Hours' } }
+        },
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: {
+            callbacks: {
+              label: function (item) {
+                return item.dataset.label + ': ' + item.formattedValue + 'h';
+              }
+            }
+          }
+        }
+      }
+    });
+  })();
+</script>
+{% endif %}
 <script>
   const searchInput = document.getElementById('searchInput');
   const filterButtons = document.querySelectorAll('.status-filter');

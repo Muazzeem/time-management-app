@@ -5,8 +5,11 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fpdf import FPDF
 from flask import Flask, abort, g, redirect, render_template, request, send_file, url_for
+
+load_dotenv(Path(__file__).parent / ".env")
 
 app = Flask(__name__)
 
@@ -376,6 +379,18 @@ def month_detail(project_id, key):
     def next_dir(col):
         return "desc" if sort == col and direction == "asc" else "asc"
 
+    day_totals = {}
+    for row in rows:
+        day_totals.setdefault(row["date"], {s: 0 for s in STATUSES})
+        day_totals[row["date"]][row["status"]] += row["hours"]
+
+    chart_labels = []
+    chart_datasets = {s: [] for s in STATUSES}
+    for day in sorted(day_totals.keys()):
+        chart_labels.append(datetime.strptime(day, "%Y-%m-%d").strftime("%d %b"))
+        for s in STATUSES:
+            chart_datasets[s].append(day_totals[day][s])
+
     total_hours = sum(r["hours"] for r in rows)
     return render_template(
         "month.html",
@@ -393,6 +408,8 @@ def month_detail(project_id, key):
         in_progress=sum(1 for r in rows if r["status"] == "In Progress"),
         total_tasks=len(rows),
         today=datetime.now().strftime("%Y-%m-%d"),
+        chart_labels=chart_labels,
+        chart_datasets=chart_datasets,
     )
 
 

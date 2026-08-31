@@ -2,3 +2,4 @@ Flask
 gunicorn
 fpdf2
 turso-serverless
+python-dotenv
