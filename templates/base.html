@@ -1,74 +1,132 @@
-<!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{% block title %}Time Tracker{% endblock %}</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-<style>
-  :root { --brand: #3c6e58; --brand-dark: #2f5745; }
-  body { background: #f4f6f8; }
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Time Tracker{% endblock %}</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <style>
+  :root {
+    --brand: #4f9d7a;
+    --brand-dark: #3c7b5f;
+    --brand-soft: rgba(79, 157, 122, .16);
+    --surface: #161b22;
+    --surface-2: #1c232c;
+    --page-bg: #0d1117;
+    --line: #2a323d;
+  }
+  body { background: var(--page-bg); color: #d6dde6; }
   .navbar-brand { font-weight: 700; letter-spacing: .2px; }
-  .bg-brand { background-color: var(--brand) !important; }
+  .bg-brand { background-color: #17352a !important; border-bottom: 1px solid var(--line); }
   .text-brand { color: var(--brand) !important; }
-  .btn-brand { background-color: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn-brand { background-color: var(--brand); border-color: var(--brand); color: #08120e; font-weight: 600; }
   .btn-brand:hover { background-color: var(--brand-dark); border-color: var(--brand-dark); color: #fff; }
-  .month-card { text-decoration: none; transition: transform .12s ease, box-shadow .12s ease; }
-  .month-card:hover { transform: translateY(-3px); box-shadow: 0 .75rem 1.5rem rgba(0,0,0,.09) !important; }
+
+  .card, .modal-content { background-color: var(--surface); border: 1px solid var(--line) !important; }
+  .card.shadow-sm, .modal-content { box-shadow: 0 .5rem 1rem rgba(0,0,0,.35) !important; }
+  .month-card, .project-card { text-decoration: none; transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
+  .month-card:hover .card, .project-card:hover { transform: translateY(-3px); border-color: var(--brand) !important; box-shadow: 0 .75rem 1.5rem rgba(0,0,0,.5) !important; }
   .stat-icon { font-size: 1.6rem; opacity: .85; }
+
+  .form-control, .form-select, .input-group-text { background-color: var(--surface-2); border-color: var(--line); color: #e6edf3; }
+  .form-control:focus, .form-select:focus { background-color: var(--surface-2); color: #e6edf3; border-color: var(--brand); box-shadow: 0 0 0 .2rem var(--brand-soft); }
+  .form-control::placeholder { color: #6b7684; }
   table input.form-control, table select.form-select { font-size: .875rem; }
-  .status-Not-Started { background: #f1f5f9; color: #475569; }
-  .status-In-Progress { background: #fff3cd; color: #92400e; }
-  .status-Completed { background: #d1e7dd; color: #146c43; }
-  .status-Blocked { background: #f8d7da; color: #b02a37; }
-  .status-select { font-weight: 600; border-radius: 999px; cursor: pointer; }
-  .cell-date, .cell-task { color: #1d4ed8; }
-  footer.app-footer { color: #9ca3af; font-size: .8rem; }
+  table input.form-control.border-0 { background-color: transparent; }
+  table input.form-control.border-0:focus { background-color: var(--surface-2); }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .5; }
+
+  .table { --bs-table-color: #d6dde6; --bs-table-bg: transparent; --bs-table-border-color: var(--line); --bs-table-hover-color: #fff; --bs-table-hover-bg: rgba(255,255,255,.04); }
+  .table > thead th, .table > tfoot td { background-color: var(--surface-2); color: #aab6c4; }
+
+  .status-Not-Started { background: #262d36; color: #a6b2c1; }
+  .status-In-Progress { background: #3d2f12; color: #f0b429; }
+  .status-Completed { background: #143326; color: #56d19a; }
+  .status-Blocked { background: #3a1b20; color: #f08a92; }
+  .status-select { font-weight: 600; border-radius: 999px; cursor: pointer; border-color: transparent; }
+  .cell-date, .cell-task { color: #7aa2f7; }
+
+  .empty-state { background: var(--surface); border: 1px dashed var(--line); border-radius: .5rem; color: #8b97a5; }
+  .breadcrumb { --bs-breadcrumb-divider-color: #6b7684; }
+  .breadcrumb-item.active { color: #8b97a5; }
+  .progress { background-color: #262d36; }
+  footer.app-footer { color: #6b7684; font-size: .8rem; }
 </style>
-{% block extra_head %}{% endblock %}
-</head>
-<body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-brand mb-4 shadow-sm">
-  <div class="container d-flex justify-content-between align-items-center">
-    <a class="navbar-brand mb-0" href="{{ url_for('index') }}">
-      <i class="bi bi-clock-history me-2"></i>Time Tracker
-    </a>
-    <button class="btn btn-sm btn-outline-light" data-bs-toggle="modal" data-bs-target="#rateModal">
-      <i class="bi bi-cash-coin me-1"></i>{{ hourly_rate | currency }}/hr
-    </button>
-  </div>
-</nav>
+    {% block extra_head %}{% endblock %}
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-brand mb-4 shadow-sm">
+      <div class="container d-flex justify-content-between align-items-center">
+        <a class="navbar-brand mb-0" href="{{ url_for('index') }}">
+          <i class="bi bi-clock-history me-2"></i>Time Tracker
+        </a>
+        <button
+          class="btn btn-sm btn-outline-light"
+          data-bs-toggle="modal"
+          data-bs-target="#rateModal"
+        >
+          <i class="bi bi-cash-coin me-1"></i>{{ hourly_rate | currency }}/hr
+        </button>
+      </div>
+    </nav>
 
-<div class="container pb-5">
-  {% block content %}{% endblock %}
-</div>
+    <div class="container pb-5">{% block content %}{% endblock %}</div>
 
-<!-- Hourly Rate Modal -->
-<div class="modal fade" id="rateModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form action="{{ url_for('update_rate') }}" method="post">
-        <input type="hidden" name="next" value="{{ request.path }}">
-        <div class="modal-header">
-          <h5 class="modal-title"><i class="bi bi-cash-coin me-2 text-brand"></i>Hourly Rate</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    <!-- Hourly Rate Modal -->
+    <div class="modal fade" id="rateModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <form action="{{ url_for('update_rate') }}" method="post">
+            <input type="hidden" name="next" value="{{ request.path }}" />
+            <div class="modal-header">
+              <h5 class="modal-title">
+                <i class="bi bi-cash-coin me-2 text-brand"></i>Hourly Rate
+              </h5>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"
+              ></button>
+            </div>
+            <div class="modal-body">
+              <label class="form-label">Rate per hour (৳)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                name="rate"
+                value="{{ hourly_rate }}"
+                class="form-control"
+                required
+              />
+              <div class="form-text">
+                Used to calculate earnings across the dashboard, month pages,
+                and PDF exports.
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button
+                type="button"
+                class="btn btn-outline-secondary"
+                data-bs-dismiss="modal"
+              >
+                Cancel
+              </button>
+              <button type="submit" class="btn btn-brand">Save Rate</button>
+            </div>
+          </form>
         </div>
-        <div class="modal-body">
-          <label class="form-label">Rate per hour (৳)</label>
-          <input type="number" step="0.01" min="0" name="rate" value="{{ hourly_rate }}" class="form-control" required>
-          <div class="form-text">Used to calculate earnings across the dashboard, month pages, and PDF exports.</div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-brand">Save Rate</button>
-        </div>
-      </form>
+      </div>
     </div>
-  </div>
-</div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-{% block extra_scripts %}{% endblock %}
-</body>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_scripts %}{% endblock %}
+  </body>
 </html>
